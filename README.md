@@ -88,7 +88,7 @@ python3 scripts/generate_image.py \
   --output tattoo-blackwork.png
 ```
 
-For image edits, the script automatically wraps the user's prompt with general editing guidance: make the requested change visible, preserve unmentioned elements, avoid unrelated additions, and do not return the original image unchanged. This is intentionally generic rather than a special case for one color, object, or style.
+For image edits, the script automatically wraps the user's prompt with general editing guidance: user-requested changes have the highest priority and must be visible; unmentioned elements should stay stable; unrelated additions are avoided; and the original image must not be returned unchanged. This is intentionally generic rather than a special case for one color, object, or style.
 
 Useful options:
 

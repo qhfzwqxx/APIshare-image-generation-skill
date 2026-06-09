@@ -236,7 +236,8 @@ def plan_edit_prompt(user_prompt: str) -> str:
     cleaned = " ".join(user_prompt.split())
     return (
         "Edit the provided reference image according to the user's request. "
-        "Make the requested change clearly visible in the final image; do not return the original image unchanged. "
+        "User-requested changes have the highest priority and must be applied, even when the user also asks to keep everything else unchanged. "
+        "Make every requested change clearly visible in the final image; do not return the original image unchanged. "
         "Preserve every important element that the user did not ask to change, including subject identity, composition, pose, proportions, style, background, lighting, and overall image format. "
         "If the request asks for a local or limited change, apply that change only to the relevant target area and keep unrelated details stable. "
         "Avoid adding text, watermarks, extra objects, or unintended style changes. "
