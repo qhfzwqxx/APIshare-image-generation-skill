@@ -1,0 +1,10 @@
+{
+  "base_url": "https://gateway.l-kx.cn/v1",
+  "api_key": "REPLACE_ME",
+  "model": "gpt-image-2",
+  "api": "image",
+  "size": "1024x1024",
+  "quality": "low",
+  "output_format": "png",
+  "timeout": 300
+}

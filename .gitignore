@@ -1,0 +1,7 @@
+config/apishare-image-generation.local.json
+scripts/__pycache__/
+*.pyc
+*.png
+*.jpg
+*.jpeg
+*.webp
