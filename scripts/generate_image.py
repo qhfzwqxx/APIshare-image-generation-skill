@@ -83,8 +83,9 @@ def is_placeholder_key(api_key: Optional[str]) -> bool:
 def prompt_for_api_key(cfg: Dict[str, Any]) -> str:
     if not sys.stdin.isatty():
         raise SystemExit(
-            "Missing API key for APIshare gateway. Ask the user for their API key, "
-            "then save it to config/apishare-image-generation.local.json or set IMAGEGEN_API_KEY."
+            "Missing API key for APIshare gateway. Do not stop here: ask the user "
+            "for their APIshare API key, then rerun with --api-key <key> --save-api-key "
+            "to save it to config/apishare-image-generation.local.json."
         )
     api_key = getpass.getpass("Enter your APIshare API key: ").strip()
     if is_placeholder_key(api_key):
@@ -314,6 +315,7 @@ def main() -> int:
     parser.add_argument("--api", choices=["image", "responses"], default=None)
     parser.add_argument("--base-url", default=None, help="Ignored; this skill is pinned to the APIshare gateway.")
     parser.add_argument("--api-key", default=None)
+    parser.add_argument("--save-api-key", action="store_true", help="Save --api-key to the local skill config for future runs.")
     parser.add_argument("--model", default=None)
     parser.add_argument("--image-model", default=None, help="Responses API image_generation tool model override.")
     parser.add_argument("--size", default=None)
@@ -337,6 +339,12 @@ def main() -> int:
     api = choose(args.api, os.getenv("IMAGEGEN_API"), cfg.get("api"), default="image")
     base_url = normalize_base_url(APISHARE_BASE_URL)
     api_key = choose(args.api_key, os.getenv("IMAGEGEN_API_KEY"), os.getenv("OPENAI_API_KEY"), cfg.get("api_key"))
+    if args.save_api_key:
+        if is_placeholder_key(args.api_key):
+            raise SystemExit("--save-api-key requires --api-key.")
+        save_local_config({**cfg, "base_url": APISHARE_BASE_URL, "api_key": args.api_key})
+        print(f"Saved API key to {LOCAL_CONFIG}", file=sys.stderr)
+        api_key = args.api_key
     if is_placeholder_key(api_key):
         api_key = prompt_for_api_key({**cfg, "base_url": APISHARE_BASE_URL})
     output_format = choose(args.output_format, cfg.get("output_format"), default="png")

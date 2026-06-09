@@ -33,6 +33,18 @@ You can also copy the example config:
 cp config/apishare-image-generation.config.example.json config/apishare-image-generation.local.json
 ```
 
+For non-interactive agents, save a key with:
+
+```bash
+python3 scripts/generate_image.py \
+  --prompt "key setup" \
+  --api-key "sk-your-key" \
+  --save-api-key \
+  --output setup.png
+```
+
+The request will then use the saved key on future runs.
+
 Then pass it explicitly:
 
 ```bash
@@ -54,6 +66,7 @@ Useful options:
 
 ```bash
 --api-key sk-your-key
+--save-api-key
 --model gpt-image-2
 --size 1024x1024
 --quality low

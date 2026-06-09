@@ -15,11 +15,19 @@ The base URL is pinned. Do not ask users for another gateway URL.
 
 ## Configure
 
-Use the user's APIshare API key. If no key is configured, ask the user for their key, then save it to:
+Use the user's APIshare API key. If no key is configured, do not end the task as failed. Ask the user for their APIshare API key, then save it to:
 
 ```text
 /root/.codex/skills/apishare-image-generation/config/apishare-image-generation.local.json
 ```
+
+In non-interactive Codex runs, save the key by rerunning the script once with:
+
+```bash
+--api-key "USER_KEY_HERE" --save-api-key
+```
+
+After saving, rerun the original image generation request.
 
 Environment variable option:
 
