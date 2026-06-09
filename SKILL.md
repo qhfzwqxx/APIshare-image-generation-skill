@@ -1,6 +1,6 @@
 ---
 name: "APIshare image generation"
-description: "Generate images through the APIshare gateway at https://gateway.l-kx.cn/v1. Supports gpt-image-2 via /v1/images/generations, saves b64_json responses, and downloads URL/COS responses into the current project directory."
+description: "Generate and edit images through the APIshare gateway at https://gateway.l-kx.cn/v1. Uses /v1/images/generations for text-to-image and /v1/images/edits multipart for image-to-image."
 ---
 
 # APIshare Image Generation
@@ -101,19 +101,21 @@ Use diagnostics without exposing the API key:
 
 ## APIshare Notes
 
-The APIshare project code registers both `/v1/images/generations` and `/images/generations`. Keep `base_url` ending in `/v1`, not the full endpoint path, because the script appends `/images/generations`.
+The APIshare project code registers both `/v1/images/generations` and `/images/generations`, plus `/v1/images/edits` and `/images/edits`. Keep `base_url` ending in `/v1`, not the full endpoint path.
 
-This skill must only use `/v1/images/generations`. Do not use `/responses`, `/v1/responses`, chat completions, or Codex model traffic for image generation.
+Use `/v1/images/generations` for text-to-image JSON requests. Use `/v1/images/edits` multipart for image-to-image with an `image` file field, following the APIshare image configuration document. Do not use `/responses`, `/v1/responses`, chat completions, or Codex model traffic for image generation.
 
 The script supports both `b64_json` and URL responses. If a gateway returns a COS/public image URL, the script downloads it locally.
 
 ## Image To Image
 
-For image-to-image, still use the generations endpoint. If the user references a previous generated image URL, pass it with:
+For image-to-image, use the edits endpoint through the script. If the user references a previous generated image URL, pass it with:
 
 ```bash
 --image-url "https://apishare.l-kx.cn/generated/example.png"
 ```
+
+The script downloads the URL first, then sends it as multipart `image=@reference.png`.
 
 If the user provides a local image path, pass it with:
 
@@ -121,6 +123,6 @@ If the user provides a local image path, pass it with:
 --image /absolute/path/to/reference.png
 ```
 
-The script uploads local images to the APIshare gateway first, receives a public URL, and attaches that URL to the generation request.
+The script sends local images as multipart `image=@file` to `/v1/images/edits`, matching the upstream document.
 
 If `/v1/images/generations` returns `502 Bad Gateway`, the script reached the gateway but the gateway/upstream path failed or timed out. If it returns `model_not_found`, the API key's group lacks a usable channel for the configured model. If it returns HTML `403 Forbidden`, an upstream nginx/WAF may be blocking the gateway or cloud-function source IP.

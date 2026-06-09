@@ -10,8 +10,9 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 
@@ -120,21 +121,72 @@ def post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int) -> 
         raise SystemExit(f"API returned non-JSON response from {url}") from exc
 
 
-def upload_local_image(base_url: str, api_key: str, image_path: Path, timeout: int) -> str:
+def post_multipart(
+    url: str,
+    api_key: str,
+    fields: Dict[str, Any],
+    files: Dict[str, Tuple[str, str, bytes]],
+    timeout: int,
+) -> Dict[str, Any]:
+    boundary = f"apishare-{uuid.uuid4().hex}"
+    chunks: list[bytes] = []
+
+    for name, value in fields.items():
+        if value is None:
+            continue
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                str(value).encode("utf-8"),
+                b"\r\n",
+            ],
+        )
+
+    for name, (filename, content_type, data) in files.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                (
+                    f'Content-Disposition: form-data; name="{name}"; '
+                    f'filename="{filename}"\r\n'
+                ).encode("utf-8"),
+                f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"),
+                data,
+                b"\r\n",
+            ],
+        )
+
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    body = b"".join(chunks)
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            text = resp.read().decode("utf-8")
+            return json.loads(text)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(format_http_error(exc.code, url, detail)) from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Request failed for {url}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"API returned non-JSON response from {url}") from exc
+
+
+def read_image_file(image_path: Path) -> Tuple[str, str, bytes]:
     if not image_path.exists() or not image_path.is_file():
         raise SystemExit(f"Image file not found: {image_path}")
     mime = mimetypes.guess_type(image_path.name)[0] or "image/png"
-    raw = image_path.read_bytes()
-    payload = {
-        "filename": image_path.name,
-        "content_type": mime,
-        "b64_json": base64.b64encode(raw).decode("ascii"),
-    }
-    response = post_json(f"{base_url}/images/uploads", api_key, payload, timeout)
-    url = response.get("url") if isinstance(response, dict) else None
-    if not isinstance(url, str) or not url:
-        raise SystemExit(f"Image upload did not return a URL: {json.dumps(response, ensure_ascii=False)[:1000]}")
-    return url
+    return image_path.name, mime, image_path.read_bytes()
 
 
 def format_http_error(status_code: int, url: str, detail: str) -> str:
@@ -164,7 +216,7 @@ def format_http_error(status_code: int, url: str, detail: str) -> str:
     return message
 
 
-def image_payload(args: argparse.Namespace, cfg: Dict[str, Any], extras: Dict[str, Any]) -> Dict[str, Any]:
+def generation_payload(args: argparse.Namespace, cfg: Dict[str, Any], extras: Dict[str, Any]) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "model": choose(args.model, cfg.get("model"), default="gpt-image-2"),
         "prompt": args.prompt,
@@ -176,10 +228,24 @@ def image_payload(args: argparse.Namespace, cfg: Dict[str, Any], extras: Dict[st
     n = choose(args.n, cfg.get("n"))
     if n is not None:
         payload["n"] = int(n)
-    if args.image_url:
-        payload["image"] = args.image_url
     payload.update(extras)
     return payload
+
+
+def edit_fields(args: argparse.Namespace, cfg: Dict[str, Any], extras: Dict[str, Any]) -> Dict[str, Any]:
+    fields: Dict[str, Any] = {
+        "model": choose(args.model, cfg.get("model"), default="gpt-image-2"),
+        "prompt": args.prompt,
+    }
+    for key in ("size", "quality", "output_format", "background", "moderation", "user"):
+        value = choose(getattr(args, key), cfg.get(key))
+        if value is not None:
+            fields[key] = value
+    n = choose(args.n, cfg.get("n"))
+    if n is not None:
+        fields["n"] = int(n)
+    fields.update(extras)
+    return fields
 
 
 ImageResult = Dict[str, str]
@@ -266,6 +332,24 @@ def download_image(url: str, output: Path, timeout: int) -> Path:
     return out
 
 
+def download_reference_image(url: str, timeout: int) -> Tuple[str, str, bytes]:
+    req = urllib.request.Request(url, method="GET", headers={"Accept": "image/*,*/*"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            content_type = resp.headers.get("content-type", "")
+            data = resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"HTTP {exc.code} while downloading reference image URL: {detail[:1000]}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Failed to download reference image URL: {exc}") from exc
+
+    if not data:
+        raise SystemExit("Reference image URL returned an empty body")
+    ext = extension_from_content_type(content_type) or extension_from_url(url) or "png"
+    return f"reference.{ext}", content_type.split(";", 1)[0].strip() or f"image/{ext}", data
+
+
 def redact_payload(payload: Dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
@@ -278,7 +362,7 @@ def print_diagnostics(base_url: str, api: str, payload: Dict[str, Any], output: 
         "size": payload.get("size"),
         "quality": payload.get("quality"),
         "output_format": payload.get("output_format"),
-        "has_image": bool(payload.get("image")),
+        "has_image": api == "edits",
         "output": str(output),
         "timeout": timeout,
     }
@@ -299,8 +383,8 @@ def main() -> int:
     parser.add_argument("--size", default=None)
     parser.add_argument("--quality", default=None)
     parser.add_argument("--output-format", default=None)
-    parser.add_argument("--image", default=None, help="Local reference image path. The skill uploads it first and sends its URL to generations.")
-    parser.add_argument("--image-url", default=None, help="Reference image URL to attach to the generations request.")
+    parser.add_argument("--image", default=None, help="Local reference image path. Uses /v1/images/edits multipart.")
+    parser.add_argument("--image-url", default=None, help="Reference image URL. The skill downloads it first, then uses /v1/images/edits multipart.")
     parser.add_argument("--background", default=None)
     parser.add_argument("--moderation", default=None)
     parser.add_argument("--user", default=None)
@@ -336,11 +420,13 @@ def main() -> int:
 
     if args.image and args.image_url:
         raise SystemExit("Use either --image or --image-url, not both.")
-    if args.image:
-        args.image_url = upload_local_image(base_url, api_key, Path(args.image).expanduser(), timeout)
-
-    url = f"{base_url}/images/generations"
-    payload = image_payload(args, {**cfg, "output_format": output_format}, extras)
+    has_reference = bool(args.image or args.image_url)
+    if has_reference:
+        url = f"{base_url}/images/edits"
+        payload = edit_fields(args, {**cfg, "output_format": output_format}, extras)
+    else:
+        url = f"{base_url}/images/generations"
+        payload = generation_payload(args, {**cfg, "output_format": output_format}, extras)
 
     if args.print_request:
         print(f"POST {url}", file=sys.stderr)
@@ -348,9 +434,16 @@ def main() -> int:
 
     out = output_path(args.output, output_format)
     if args.diagnose:
-        print_diagnostics(base_url, api, payload, out, timeout)
+        print_diagnostics(base_url, "edits" if has_reference else api, payload, out, timeout)
 
-    response = post_json(url, api_key, payload, timeout)
+    if args.image:
+        filename, mime, raw = read_image_file(Path(args.image).expanduser())
+        response = post_multipart(url, api_key, payload, {"image": (filename, mime, raw)}, timeout)
+    elif args.image_url:
+        filename, mime, raw = download_reference_image(args.image_url, timeout)
+        response = post_multipart(url, api_key, payload, {"image": (filename, mime, raw)}, timeout)
+    else:
+        response = post_json(url, api_key, payload, timeout)
     result = extract_image_api_result(response)
     source = result["kind"]
     if source == "url":

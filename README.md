@@ -1,6 +1,6 @@
 # APIshare Image Generation Skill
 
-Generate images through the APIshare image generation gateway at:
+Generate and edit images through the APIshare image generation gateway at:
 
 ```text
 https://gateway.l-kx.cn/v1
@@ -66,7 +66,9 @@ python3 scripts/generate_image.py \
 
 ## Image To Image
 
-This skill still uses the generations endpoint. If you already have a public image URL, attach it:
+This skill follows the APIshare image configuration document: text-to-image uses `/v1/images/generations`; image-to-image uses `/v1/images/edits` with multipart `image=@file`.
+
+If you already have a public image URL, attach it:
 
 ```bash
 python3 scripts/generate_image.py \
@@ -75,7 +77,9 @@ python3 scripts/generate_image.py \
   --output tattoo-variant.png
 ```
 
-If the user provides a local image, the skill uploads it to the APIshare gateway first, receives a public URL, then sends that URL with the generations request:
+The script downloads the URL first, then sends it to `/v1/images/edits` as multipart image data.
+
+If the user provides a local image, the skill sends it directly to `/v1/images/edits` as multipart image data:
 
 ```bash
 python3 scripts/generate_image.py \
