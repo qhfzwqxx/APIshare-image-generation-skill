@@ -105,4 +105,20 @@ Prefer `--api image` for this skill. Only use `--api responses` when explicitly 
 
 The script supports both `b64_json` and URL responses. If a gateway returns a COS/public image URL, the script downloads it locally.
 
+## Image To Image
+
+For image-to-image, still use the generations endpoint. If the user references a previous generated image URL, pass it with:
+
+```bash
+--image-url "https://apishare.l-kx.cn/generated/example.png"
+```
+
+If the user provides a local image path, pass it with:
+
+```bash
+--image /absolute/path/to/reference.png
+```
+
+The script uploads local images to the APIshare gateway first, receives a public URL, and attaches that URL to the generation request.
+
 If `/v1/images/generations` returns `502 Bad Gateway`, the script reached the gateway but the gateway/upstream path failed or timed out. If it returns `model_not_found`, the API key's group lacks a usable channel for the configured model. If it returns HTML `403 Forbidden`, an upstream nginx/WAF may be blocking the gateway or cloud-function source IP.

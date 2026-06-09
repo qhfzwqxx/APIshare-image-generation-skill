@@ -62,6 +62,26 @@ python3 scripts/generate_image.py \
   --output dog.png
 ```
 
+## Image To Image
+
+This skill still uses the generations endpoint. If you already have a public image URL, attach it:
+
+```bash
+python3 scripts/generate_image.py \
+  --prompt "Keep the tattoo shape, make it cleaner and sharper." \
+  --image-url "https://apishare.l-kx.cn/generated/example.png" \
+  --output tattoo-variant.png
+```
+
+If the user provides a local image, the skill uploads it to the APIshare gateway first, receives a public URL, then sends that URL with the generations request:
+
+```bash
+python3 scripts/generate_image.py \
+  --prompt "Turn this tattoo into a minimal blackwork version." \
+  --image ./tattoo.png \
+  --output tattoo-blackwork.png
+```
+
 Useful options:
 
 ```bash
@@ -71,6 +91,8 @@ Useful options:
 --size 1024x1024
 --quality low
 --output-format png
+--image ./reference.png
+--image-url https://apishare.l-kx.cn/generated/reference.png
 --timeout 300
 --diagnose
 ```

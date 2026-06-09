@@ -120,6 +120,23 @@ def post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int) -> 
         raise SystemExit(f"API returned non-JSON response from {url}") from exc
 
 
+def upload_local_image(base_url: str, api_key: str, image_path: Path, timeout: int) -> str:
+    if not image_path.exists() or not image_path.is_file():
+        raise SystemExit(f"Image file not found: {image_path}")
+    mime = mimetypes.guess_type(image_path.name)[0] or "image/png"
+    raw = image_path.read_bytes()
+    payload = {
+        "filename": image_path.name,
+        "content_type": mime,
+        "b64_json": base64.b64encode(raw).decode("ascii"),
+    }
+    response = post_json(f"{base_url}/images/uploads", api_key, payload, timeout)
+    url = response.get("url") if isinstance(response, dict) else None
+    if not isinstance(url, str) or not url:
+        raise SystemExit(f"Image upload did not return a URL: {json.dumps(response, ensure_ascii=False)[:1000]}")
+    return url
+
+
 def format_http_error(status_code: int, url: str, detail: str) -> str:
     message = f"HTTP {status_code} from {url}: {detail}"
     try:
@@ -159,6 +176,8 @@ def image_payload(args: argparse.Namespace, cfg: Dict[str, Any], extras: Dict[st
     n = choose(args.n, cfg.get("n"))
     if n is not None:
         payload["n"] = int(n)
+    if args.image_url:
+        payload["image"] = args.image_url
     payload.update(extras)
     return payload
 
@@ -301,6 +320,7 @@ def print_diagnostics(base_url: str, api: str, payload: Dict[str, Any], output: 
         "size": payload.get("size"),
         "quality": payload.get("quality"),
         "output_format": payload.get("output_format"),
+        "has_image": bool(payload.get("image")),
         "output": str(output),
         "timeout": timeout,
     }
@@ -321,6 +341,8 @@ def main() -> int:
     parser.add_argument("--size", default=None)
     parser.add_argument("--quality", default=None)
     parser.add_argument("--output-format", default=None)
+    parser.add_argument("--image", default=None, help="Local reference image path. The skill uploads it first and sends its URL to generations.")
+    parser.add_argument("--image-url", default=None, help="Reference image URL to attach to the generations request.")
     parser.add_argument("--background", default=None)
     parser.add_argument("--moderation", default=None)
     parser.add_argument("--user", default=None)
@@ -351,6 +373,11 @@ def main() -> int:
     timeout = int(choose(args.timeout, cfg.get("timeout"), default=300))
     extras = parse_kv(args.param)
     request_extras = parse_kv(args.request_param)
+
+    if args.image and args.image_url:
+        raise SystemExit("Use either --image or --image-url, not both.")
+    if args.image:
+        args.image_url = upload_local_image(base_url, api_key, Path(args.image).expanduser(), timeout)
 
     if api == "image":
         url = f"{base_url}/images/generations"
