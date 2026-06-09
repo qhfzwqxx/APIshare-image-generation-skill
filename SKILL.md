@@ -125,4 +125,6 @@ If the user provides a local image path, pass it with:
 
 The script sends local images as multipart `image=@file` to `/v1/images/edits`, matching the upstream document.
 
+For every image edit, plan the prompt generically instead of adding special-case color or object rules. State the requested change clearly, require a visible edit, preserve all unmentioned elements, and prevent returning the original image unchanged. The script applies this prompt planning automatically for `--image` and `--image-url`.
+
 If `/v1/images/generations` returns `502 Bad Gateway`, the script reached the gateway but the gateway/upstream path failed or timed out. If it returns `model_not_found`, the API key's group lacks a usable channel for the configured model. If it returns HTML `403 Forbidden`, an upstream nginx/WAF may be blocking the gateway or cloud-function source IP.

@@ -88,6 +88,8 @@ python3 scripts/generate_image.py \
   --output tattoo-blackwork.png
 ```
 
+For image edits, the script automatically wraps the user's prompt with general editing guidance: make the requested change visible, preserve unmentioned elements, avoid unrelated additions, and do not return the original image unchanged. This is intentionally generic rather than a special case for one color, object, or style.
+
 Useful options:
 
 ```bash
