@@ -182,34 +182,6 @@ def image_payload(args: argparse.Namespace, cfg: Dict[str, Any], extras: Dict[st
     return payload
 
 
-def responses_payload(
-    args: argparse.Namespace,
-    cfg: Dict[str, Any],
-    tool_extras: Dict[str, Any],
-    request_extras: Dict[str, Any],
-) -> Dict[str, Any]:
-    tool: Dict[str, Any] = {"type": "image_generation"}
-    image_model = choose(args.image_model, cfg.get("image_model"))
-    if image_model is not None:
-        tool["model"] = image_model
-    for key in ("size", "quality", "output_format", "background", "moderation"):
-        value = choose(getattr(args, key), cfg.get(key))
-        if value is not None:
-            tool[key] = value
-    tool.update(tool_extras)
-    payload: Dict[str, Any] = {
-        "model": choose(args.model, cfg.get("model"), default="gpt-image-2"),
-        "input": args.prompt,
-        "tools": [tool],
-        "store": choose(args.store, cfg.get("store"), default=False),
-    }
-    max_output_tokens = choose(args.max_output_tokens, cfg.get("max_output_tokens"))
-    if max_output_tokens is not None:
-        payload["max_output_tokens"] = int(max_output_tokens)
-    payload.update(request_extras)
-    return payload
-
-
 ImageResult = Dict[str, str]
 
 
@@ -223,20 +195,6 @@ def extract_image_api_result(data: Dict[str, Any]) -> ImageResult:
     if isinstance(first, dict) and isinstance(first.get("url"), str):
         return {"kind": "url", "data": first["url"]}
     raise SystemExit(f"No b64_json found in Image API response: {json.dumps(first)[:1000]}")
-
-
-def extract_responses_result(data: Dict[str, Any]) -> ImageResult:
-    output = data.get("output")
-    if not isinstance(output, list):
-        raise SystemExit(f"No output list found in Responses API response: {json.dumps(data)[:1000]}")
-    for item in output:
-        if isinstance(item, dict) and item.get("type") == "image_generation_call":
-            result = item.get("result")
-            if isinstance(result, str) and result:
-                if result.startswith("http://") or result.startswith("https://"):
-                    return {"kind": "url", "data": result}
-                return {"kind": "b64", "data": result}
-    raise SystemExit(f"No image_generation_call.result found in Responses API response: {json.dumps(output)[:1000]}")
 
 
 def save_b64_image(b64_data: str, output: Path) -> None:
@@ -328,16 +286,16 @@ def print_diagnostics(base_url: str, api: str, payload: Dict[str, Any], output: 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate images with gpt-image-2 via Image API or Responses API.")
+    parser = argparse.ArgumentParser(description="Generate images with gpt-image-2 via APIshare Image API.")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output", default=None, help="Output filename/path. Defaults to generated-<timestamp>.<format> in cwd.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
-    parser.add_argument("--api", choices=["image", "responses"], default=None)
+    parser.add_argument("--api", choices=["image"], default=None)
     parser.add_argument("--base-url", default=None, help="Ignored; this skill is pinned to the APIshare gateway.")
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--save-api-key", action="store_true", help="Save --api-key to the local skill config for future runs.")
     parser.add_argument("--model", default=None)
-    parser.add_argument("--image-model", default=None, help="Responses API image_generation tool model override.")
+    parser.add_argument("--image-model", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--size", default=None)
     parser.add_argument("--quality", default=None)
     parser.add_argument("--output-format", default=None)
@@ -347,10 +305,10 @@ def main() -> int:
     parser.add_argument("--moderation", default=None)
     parser.add_argument("--user", default=None)
     parser.add_argument("--n", type=int, default=None)
-    parser.add_argument("--store", type=parse_value, default=None)
-    parser.add_argument("--max-output-tokens", type=int, default=None)
-    parser.add_argument("--param", action="append", help="Extra field as key=value. Image API: request field. Responses: image_generation tool field.")
-    parser.add_argument("--request-param", action="append", help="Extra top-level Responses request field as key=value.")
+    parser.add_argument("--store", type=parse_value, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--max-output-tokens", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--param", action="append", help="Extra Image API request field as key=value.")
+    parser.add_argument("--request-param", action="append", help=argparse.SUPPRESS)
     parser.add_argument("--timeout", type=int, default=None)
     parser.add_argument("--print-request", action="store_true")
     parser.add_argument("--diagnose", action="store_true", help="Print non-secret request diagnostics before calling the API.")
@@ -359,6 +317,8 @@ def main() -> int:
     config_path = Path(args.config).expanduser()
     cfg = load_effective_config(config_path)
     api = choose(args.api, os.getenv("IMAGEGEN_API"), cfg.get("api"), default="image")
+    if api != "image":
+        raise SystemExit("This skill only uses /v1/images/generations. Do not use /responses for APIshare image generation.")
     base_url = normalize_base_url(APISHARE_BASE_URL)
     api_key = choose(args.api_key, os.getenv("IMAGEGEN_API_KEY"), os.getenv("OPENAI_API_KEY"), cfg.get("api_key"))
     if args.save_api_key:
@@ -372,19 +332,15 @@ def main() -> int:
     output_format = choose(args.output_format, cfg.get("output_format"), default="png")
     timeout = int(choose(args.timeout, cfg.get("timeout"), default=300))
     extras = parse_kv(args.param)
-    request_extras = parse_kv(args.request_param)
+    parse_kv(args.request_param)
 
     if args.image and args.image_url:
         raise SystemExit("Use either --image or --image-url, not both.")
     if args.image:
         args.image_url = upload_local_image(base_url, api_key, Path(args.image).expanduser(), timeout)
 
-    if api == "image":
-        url = f"{base_url}/images/generations"
-        payload = image_payload(args, {**cfg, "output_format": output_format}, extras)
-    else:
-        url = f"{base_url}/responses"
-        payload = responses_payload(args, {**cfg, "output_format": output_format}, extras, request_extras)
+    url = f"{base_url}/images/generations"
+    payload = image_payload(args, {**cfg, "output_format": output_format}, extras)
 
     if args.print_request:
         print(f"POST {url}", file=sys.stderr)
@@ -395,7 +351,7 @@ def main() -> int:
         print_diagnostics(base_url, api, payload, out, timeout)
 
     response = post_json(url, api_key, payload, timeout)
-    result = extract_image_api_result(response) if api == "image" else extract_responses_result(response)
+    result = extract_image_api_result(response)
     source = result["kind"]
     if source == "url":
         out = download_image(result["data"], out, timeout)

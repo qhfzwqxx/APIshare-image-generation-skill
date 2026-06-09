@@ -43,6 +43,8 @@ cp config/apishare-image-generation.config.example.json config/apishare-image-ge
 
 ## Use
 
+Always call the script. Do not call the gateway directly from Codex chat/completion tooling.
+
 ```bash
 python3 /root/.codex/skills/apishare-image-generation/scripts/generate_image.py \
   --config /root/.codex/skills/apishare-image-generation/config/apishare-image-generation.local.json \
@@ -101,7 +103,7 @@ Use diagnostics without exposing the API key:
 
 The APIshare project code registers both `/v1/images/generations` and `/images/generations`. Keep `base_url` ending in `/v1`, not the full endpoint path, because the script appends `/images/generations`.
 
-Prefer `--api image` for this skill. Only use `--api responses` when explicitly testing Responses `image_generation` tool bridging.
+This skill must only use `/v1/images/generations`. Do not use `/responses`, `/v1/responses`, chat completions, or Codex model traffic for image generation.
 
 The script supports both `b64_json` and URL responses. If a gateway returns a COS/public image URL, the script downloads it locally.
 

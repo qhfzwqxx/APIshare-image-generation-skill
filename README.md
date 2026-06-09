@@ -56,6 +56,8 @@ python3 scripts/generate_image.py \
 
 ## Usage
 
+Always call `scripts/generate_image.py`; do not send image requests through `/responses` or a Codex chat/completion request.
+
 ```bash
 python3 scripts/generate_image.py \
   --prompt "A cute dog, clean illustration, no text, no watermark." \
@@ -107,6 +109,7 @@ Pass gateway-specific fields:
 
 ## Troubleshooting
 
+- `503 system cpu overloaded` from `/responses`: this is not the image script path. The agent or client is sending Codex/model traffic to the gateway; run this skill script instead so it uses `/v1/images/generations`.
 - Missing key: ask the user for their APIshare key and save it in `config/apishare-image-generation.local.json`, or set `IMAGEGEN_API_KEY`.
 - `model_not_found`: the API key's group may not have a usable channel for the model.
 - `bad_response_status_code`: the gateway reached an upstream, but that upstream returned an error.

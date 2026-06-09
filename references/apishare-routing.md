@@ -15,4 +15,4 @@ https://gateway.l-kx.cn/v1/images/generations
 
 Use the bundled script with `--api image`; it appends `/images/generations` to `base_url`.
 
-The project also bridges Responses API `image_generation` tool calls to `/v1/images/generations`, but this skill should prefer the direct image generation endpoint unless the user explicitly asks to test Responses bridging.
+This skill must use the direct image generation endpoint. Do not route image generation through Responses API or chat/completion traffic.
